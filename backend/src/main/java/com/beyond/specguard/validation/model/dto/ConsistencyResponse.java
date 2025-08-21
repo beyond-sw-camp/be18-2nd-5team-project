@@ -1,4 +1,4 @@
-package com.beyond.specguard.validation.dto;
+package com.beyond.specguard.validation.model.dto;
 
 import lombok.Data;
 

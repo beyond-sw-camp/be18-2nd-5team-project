@@ -1,11 +1,19 @@
 package com.beyond.specguard.validation.controller;
 
-import com.beyond.specguard.validation.dto.ConsistencyRequest;
-import com.beyond.specguard.validation.dto.ConsistencyResponse;
-import com.beyond.specguard.validation.service.ConsistencyService;
+import com.beyond.specguard.validation.model.dto.ConsistencyCalculateRequest;
+import com.beyond.specguard.validation.model.dto.ConsistencyResponse;
+import com.beyond.specguard.validation.model.service.ConsistencyService;
+import com.beyond.specguard.validation.model.vo.ConsistencyTriggerOutcome;
+import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/consistency")
 public class ConsistencyScoreController {
@@ -28,6 +36,26 @@ public class ConsistencyScoreController {
 
         ConsistencyResponse response = consistencyService.getConsistencyResult(resumeId, requesterId);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(path = "/{resumeId}/calculate",
+        consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> calculateConsistencyScore(
+            @PathVariable UUID resumeId,
+            @RequestHeader(name = "Idempotency-Key") String idemKey,
+            @Valid @RequestBody ConsistencyCalculateRequest body,
+            @RequestHeader("Authorization") String authorizationHeader
+    ) {
+        String requesterId = extractUserIdFromToken(authorizationHeader);
+        log.debug("resumeId : {}", resumeId);
+        ConsistencyTriggerOutcome outcome = consistencyService.triggerCalculation(resumeId, idemKey, body, requesterId);
+
+        return switch (outcome.type()) {
+            case ACCEPTED -> ResponseEntity.status(HttpStatus.ACCEPTED).body(outcome.payload());
+            case REUSED   -> ResponseEntity.ok(outcome.payload());
+            case SKIPPED  -> ResponseEntity.noContent()
+                    .header("SG-Skip-Reason", "UP_TO_DATE").build();
+        };
     }
 
     // JWT 토큰에서 사용자 ID 추출하는 메서드
